@@ -1,0 +1,21 @@
+{
+  "name": "opencolour/console",
+  "description": "A MODX console extension",
+  "version": "0.0.1",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Roman Gorbunov",
+      "homepage": "https://github.com/hetzerok"
+    }
+  ],
+  "require": {
+    "php": ">=5.5.9",
+    "symfony/console": "^3.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "": "src/"
+    }
+  }
+}
