@@ -2,3 +2,10 @@
 /config/config.inc.php
 /vendor
 /db/schemas/local.schema.json
+/db/local.version
+
+#dev_mode
+/db/datas
+/db/migrations
+/db/schemas
+/db/*.version.json

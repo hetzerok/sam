@@ -14,6 +14,7 @@ use Symfony\Component\Console\Application;
 $commandsArray = array(
     'Opencolour\\Migrations\\Commands\\InitializeCommand',
     'Opencolour\\Migrations\\Commands\\MigrateCommand',
+    'Opencolour\\Migrations\\Commands\\GenerateCommand',
 );
 
 // Инициализируем команды

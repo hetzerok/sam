@@ -14,8 +14,6 @@ use Opencolour\Migrations\StructureParser;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Formatter\OutputFormatterStyle;
 
 /**
@@ -24,12 +22,12 @@ use Symfony\Component\Console\Formatter\OutputFormatterStyle;
  *
  * Команда инициализации системы миграций
  */
-class InitializeCommand extends Command {
+class GenerateCommand extends Command {
 
     protected function configure()
     {
-        $this->setName("migrations:initialize")
-            ->setDescription("Initialize migrations. Make all needed starting files.")
+        $this->setName("migrations:generate")
+            ->setDescription("Generate new migration file")
             ->setHelp(<<<EOT
 Here is description
 EOT
@@ -43,12 +41,11 @@ EOT
         $structureParser = new StructureParser($formatCoder, $output);
         $migrationCollector = new MigrationCollector($formatCoder, $output, $structureParser);
 
-        $structureParser->initializeSchema();
-        $migrationCollector->writeMigration(true);
+        $migrationCollector->writeMigration();
 
         $header_style = new OutputFormatterStyle('white', 'green', array('bold'));
         $output->getFormatter()->setStyle('header', $header_style);
 
-        $output->writeln('<comment>Initialization complete</comment>');
+        $output->writeln('<comment>Generating complete</comment>');
     }
 }

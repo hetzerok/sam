@@ -1,20 +1,20 @@
 <?php
-/**
- * Copyright (c) 2017.
- * Roman Gorbunov (hetzerok)
- * hetzerok@gmail.com
- */
+    /**
+     * Copyright (c) 2017.
+     * Roman Gorbunov (hetzerok)
+     * hetzerok@gmail.com
+     */
 
 namespace Opencolour\Migrations;
 
-use Opencolour\Additions\Config;
+    use Opencolour\Additions\Config;
 
-/**
- * Парсер структуры существующей БД
- *
- * Class StructureParser
- * @package Opencolour\Migrations
- */
+    /**
+     * Парсер структуры существующей БД
+     *
+     * Class StructureParser
+     * @package Opencolour\Migrations
+     */
 class StructureParser
 {
 
@@ -31,6 +31,17 @@ class StructureParser
     {
         $this->config = Config::getInstance();
         $this->pdo = $this->config->getConnection();
+    }
+
+    /**
+     * Генерирует локальную и глобальную схемы
+     * Используется во время инициализации
+     */
+    public function initializeSchema() {
+        $schema = $this->getSchema();
+        $schemaData = $this->prepareSchema($schema);
+        $this->writeSchema($schemaData);
+        $this->writeSchema($schemaData, 'global');
     }
 
     /**
