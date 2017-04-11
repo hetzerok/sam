@@ -46,9 +46,6 @@ EOT
         $structureParser->initializeSchema();
         $migrationCollector->writeMigration(true);
 
-        $header_style = new OutputFormatterStyle('white', 'green', array('bold'));
-        $output->getFormatter()->setStyle('header', $header_style);
-
         $output->writeln('<comment>Initialization complete</comment>');
     }
 }

@@ -35,8 +35,7 @@ class MigrateCommand extends Command {
         $this->setName("migrations:migrate")
             ->setDescription("Applying of migrations")
             ->setDefinition(array(
-                new InputOption('start', 's', InputOption::VALUE_OPTIONAL, 'Start number of the range of Fibonacci number', $start),
-                new InputOption('stop', 'e', InputOption::VALUE_OPTIONAL, 'stop number of the range of Fibonacci number', $stop)
+                new InputOption('last', 'l', InputOption::VALUE_OPTIONAL, 'Last version of applyed migration', $start),
             ))
             ->setHelp(<<<EOT
 Here is description of applying
@@ -53,13 +52,19 @@ EOT
         $migrationCollector = new MigrationCollector($formatCoder, $output, $structureParser);
         $queryMaker = new QueryMaker();
 
-        //TODO здесь конечно более сложная сборка с параметрами версий должна быть
-        $schema = $migrationCollector->getMigrationData();
-        $queryMaker->schemaQuery($schema);
+        $migrations = $migrationCollector->getCurrentMigrations($input->getOption('last'));
+        if(!empty($migrations)) {
+            foreach ($migrations as $key => $migration) {
+                if ($queryMaker->schemaQuery($migration)) {
+                    $output->writeln('<info>Migration '.$key.' applied successfull.</info>');
+                } else {
+                    $output->writeln('<error>Migration '.$key.' not applied.</error>');
+                }
+            }
+        } else {
+            $output->writeln('<error>Cannot find migrations.</error>');
+        }
 
-        $header_style = new OutputFormatterStyle('white', 'green', array('bold'));
-        $output->getFormatter()->setStyle('header', $header_style);
-
-        $output->writeln('<header>Carramba</header>');
+        $output->writeln('<comment>Migration applying complete</comment>');
     }
 }

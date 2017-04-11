@@ -35,7 +35,7 @@ class StructureParser
 
     /**
      * Генерирует локальную и глобальную схемы
-     * Используется во время инициализации
+     * Используется во время инициализации и создания миграции
      */
     public function initializeSchema() {
         $schema = $this->getSchema();

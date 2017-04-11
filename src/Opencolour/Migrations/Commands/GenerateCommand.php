@@ -41,10 +41,9 @@ EOT
         $structureParser = new StructureParser($formatCoder, $output);
         $migrationCollector = new MigrationCollector($formatCoder, $output, $structureParser);
 
-        $migrationCollector->writeMigration();
-
-        $header_style = new OutputFormatterStyle('white', 'green', array('bold'));
-        $output->getFormatter()->setStyle('header', $header_style);
+        if($migrationCollector->writeMigration()) {
+            $structureParser->initializeSchema();
+        }
 
         $output->writeln('<comment>Generating complete</comment>');
     }

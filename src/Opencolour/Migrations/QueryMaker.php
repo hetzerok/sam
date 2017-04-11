@@ -30,35 +30,45 @@ class QueryMaker
     public function schemaQuery($schema)
     {
 
+        $flag = true;
+
         // Цикл создания и заполнения таблиц
         foreach ($schema as $table_key => $table) {
 
-            // Необходимо создать таблицу
-            if (!$table['exist'] && $table['columns']) {
-                $sql = "CREATE TABLE `".$this->config->getOption('table_prefix').$table['name']."`";
+            // Если все запросы до этого прошли удачно
+            if ($flag) {
 
-                // Добавляем столбцы к таблице
-                $csql = $this->addQueryColumns($table['columns']);
+                // Необходимо создать таблицу
+                if (!$table['action'] && $table['columns']) {
+                    $sql = "CREATE TABLE `".$this->config->getOption('table_prefix').$table['name']."`";
 
-                if (mb_strlen($csql) > 3) {
-                    $csql .= ',';
-                }
-                $csql .= $this->addQueryIndexes($table['indexes']);
+                    // Добавляем столбцы к таблице
+                    $csql = $this->addQueryColumns($table['columns']);
 
-                // Оборачиваем в скобки добавленные столбцы
-                if ($csql) {
-                    $sql .= " (".$csql.")";
-                }
+                    if (mb_strlen($csql) > 3) {
+                        $csql .= ',';
+                    }
 
-                $sql .= " COMMENT='".$table['comment']
-                    ."' COLLATE='".$table['collation']
-                    ."' ENGINE='".$table['engine']."';";
+                    // Добавляем индексы к таблице
+                    if ($table['indexes']) {
+                        $csql .= $this->addQueryIndexes($table['indexes']);
+                    }
 
-                $this->pdo->query($sql);
+                    // Оборачиваем в скобки добавленные столбцы
+                    if ($csql) {
+                        $sql .= " (".$csql.")";
+                    }
 
-                // Таблица уже создана, действуем через ALTER
-            } else {
-                if ($table['action']) {
+                    $sql .= " COMMENT='".$table['comment']
+                        ."' COLLATE='".$table['collation']
+                        ."' ENGINE='".$table['engine']."';";
+
+                    if (!$this->pdo->query($sql)) {
+                        $flag = false;
+                    }
+
+                    // Таблица уже создана, действуем через ALTER
+                } else {
 
                     // Изменяем опции и столбцы таблицы
                     if ($table['action'] == 'alter') {
@@ -95,39 +105,61 @@ class QueryMaker
                             $sql .= " COMMENT '".$table['comment']."'";
                         }
 
+                        // Если заданы столбцы - изменяем их
                         if ($table['columns']) {
 
-                            // Верная расстановка запятых
                             if ($i > 0) {
                                 $sql .= ",";
                             }
-                            //$i++;
+                            $i++;
 
                             $sql .= $this->alterQueryColumns($table['columns']);
                         }
 
+                        // Если заданы индексы - изменяем их
+                        if ($table['indexes']) {
+
+                            if ($i > 0) {
+                                $sql .= ",";
+                            }
+
+                            $sql .= $this->alterQueryIndexes($table['indexes']);
+
+                        }
+
                         $sql .= ';';
 
-                        $this->pdo->query($sql);
+                        if ($this->pdo->query($sql)) {
+                            $flag = false;
+                        }
                     } // Удаляем таблицу
                     else {
                         if ($table['action'] == 'drop') {
                             $sql = "DROP TABLE `".$this->config->getOption('table_prefix').$table_key."`;";
-                            $this->pdo->query($sql);
-                            unlink($schema[$table_key]);
+                            if (!$this->pdo->query($sql)) {
+                                $flag = false;
+                            }
+                            unset($schema[$table_key]);
                         }
                     }
                 }
             }
-
-            // Создаем необходимые pk
-            // Создаем индексы
         }
 
         // Цикл для добавления constraints (чтобы быть уверенными в существовании столбцов)
         foreach ($schema as $table) {
 
+            if ($table['foreignKeys']) {
+                $sql = "ALTER TABLE `".$this->config->getOption(
+                        'table_prefix'
+                    ).$table_key."` ".$this->alterQueryForeignKeys($table['foreignKeys']).";";
+                if (!$this->pdo->query($sql)) {
+                    $flag = false;
+                }
+            }
         }
+
+        return !$flag;
     }
 
     public function generateColumnQuery($col)
@@ -167,7 +199,7 @@ class QueryMaker
             $comment = " COMMENT '".$col['comment']."'";
         }
 
-        $sql = "`".$col['name']."` ".strtoupper($col['type']).$null.$default.$ai.$comment;
+        $sql = strtoupper($col['type']).$null.$default.$ai.$comment;
 
         return $sql;
     }
@@ -184,6 +216,12 @@ class QueryMaker
         $i = 0;
         foreach ($columns as $key => $col) {
 
+            // Определяем новое имя столбца
+            $name = $key;
+            if ($col['name']) {
+                $name = $col['name'];
+            }
+
             $gen = false;
             $action = '';
             if ($col['action']) {
@@ -191,7 +229,7 @@ class QueryMaker
                     $action = "DROP COLUMN `".$key."``";
                 } else {
                     if ($col['action'] == 'change') {
-                        $action = "CHANGE `".$key."` ";
+                        $action = "CHANGE COLUMN `".$key."` `".$name."` ";
                         $gen = true;
                     }
                 }
@@ -234,7 +272,7 @@ class QueryMaker
             }
             $i++;
 
-            $sql .= $this->generateColumnQuery($col);
+            $sql .= "`" . $col['name'] . "` " . $this->generateColumnQuery($col);
         }
 
         return $sql;
@@ -251,7 +289,7 @@ class QueryMaker
 
         // Вид индекса
         if ($ind['name'] == 'PRIMARY') {
-            $vid = 'PRIMARY KEY ';
+            $vid = 'PRIMARY KEY';
         } else {
             if ($ind['type'] == 'FULLTEXT') {
                 $vid = 'FULLTEXT INDEX `'.$ind['name'].'`';
@@ -302,7 +340,7 @@ class QueryMaker
     }
 
     /**
-     * Действия над столбцами в запросе изменения таблицы
+     * Действия над индексами в запросе изменения таблицы
      *
      * @param array $indexes - массив индексов
      * @return string
@@ -354,6 +392,104 @@ class QueryMaker
             $i++;
 
             $sql .= $this->generateIndexQuery($ind);
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Создание SQL кода вида внешнего ключа
+     *
+     * @param array $key - массив одного ключа
+     * @return string
+     */
+    public function getForeignKeyVid($key)
+    {
+
+        $vid = 'CONSTRAINT '.$key['name'];
+
+        return $vid;
+    }
+
+    /**
+     * Создание SQL записи для внешнего ключа
+     *
+     * @param array $key - массив одного внешнего ключа
+     * @return string
+     */
+    public function generateForeignKeyQuery($key)
+    {
+
+        $vid = $this->getForeignKeyVid($key).' ';
+
+        // Локальные столбцы
+        $local = '';
+        $i = 0;
+        foreach ($key['localKeys'] as $value) {
+
+            // Верная расстановка запятых
+            if ($i > 0) {
+                $local .= ", ";
+            }
+            $i++;
+
+            $local .= "`".$value."`";
+        }
+        if ($local) {
+            $local = 'FOREIGN KEY ('.$local.')';
+        }
+
+        // Связанные столбцы
+        $foreign = '';
+        $i = 0;
+        foreach ($key['foreignKeys'] as $value) {
+
+            // Верная расстановка запятых
+            if ($i > 0) {
+                $local .= ", ";
+            }
+            $i++;
+
+            $foreign .= "`".$value."`";
+        }
+        if ($foreign) {
+            $foreign = 'REFERENCES `'.$this->config->getOption('table_prefix').$key['foreignTable'].'` ('.$foreign.')';
+        }
+
+        $sql = $vid.$local.' '.$foreign;
+
+        return $sql;
+    }
+
+    /**
+     * Действия над внешними ключами
+     *
+     * @param array $keys - массив внешних ключей
+     * @return string
+     */
+    public function alterQueryForeignKeys($keys)
+    {
+        $sql = ' ';
+        $i = 0;
+        foreach ($keys as $key) {
+
+            // Верная расстановка запятых
+            if ($i > 0) {
+                $sql .= ", ";
+            }
+            $i++;
+
+            if ($key['action']) {
+                $vid = $this->getForeignKeyVid($key);
+                $action = 'DROP '.$vid;
+                if ($key['action'] = 'change') {
+                    $action .= ', ADD '.$this->generateForeignKeyQuery($key);
+                }
+            } else {
+                $action = "ADD ".$this->generateForeignKeyQuery($key);
+            }
+
+            $sql .= $action;
         }
 
         return $sql;

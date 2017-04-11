@@ -47,7 +47,7 @@ class FormatCoder
 
     public function decodeData($data, $type = 'json')
     {
-        $output = array();
+        $output = [];
 
         switch ($type) {
             case 'json':

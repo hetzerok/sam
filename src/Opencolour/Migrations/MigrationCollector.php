@@ -41,52 +41,141 @@ class MigrationCollector
     }
 
     /**
-     * @return bool|mixed
+     * Преобразование строкового представления ключа миграции в timestamp
+     *
+     * @param string $strKey
+     * @return bool|int
      */
-    public function getMigrationData()
-    {
-        //TODO здесь также применяем разбор из разных типов
+    public function getIntKey($strKey) {
         $output = false;
-        $path = $this->config->getOption('schema_path');
-        $filePath = $path . 'local' . '.' . 'schema' . '.' . 'json';
-        $output = json_decode(file_get_contents($filePath), true);
+
+        if($date = \DateTime::createFromFormat($this->config->getOption('time_format'), $strKey)) {
+            $output = $date->getTimestamp();
+        }
+
         return $output;
     }
+
+    /**
+     * Получает массив миграций в той последовательности, которой должно идти применение.
+     * Возвращаются миграции начиная со следующей от той, которая указана в локальной версии.
+     * Если передан параметр $last - последняя миграция будет с данным ключем или меньше него
+     * (в случае если миграции с таким ключем не существует).
+     * Если нет, то последняя миграция будет браться из глобальной версии.
+     *
+     * @param string $last - ключ последней миграции, до которой идет применение
+     * @return array
+     */
+    public function getCurrentMigrations($last = '') {
+
+        $output = [];
+
+        // Чтение информации о локальной версии миграций
+        $localVersion = $this->getVersion('local');
+
+        //  Чтение информации о глобальной версии файла
+        $globalVersion = $this->getVersion('global');
+
+        if($globalVersion) {
+            if(array_key_exists('version', $globalVersion)) {
+
+                $initVersion = '00000000_000000';
+                if($localVersion) {
+                    if(array_key_exists('version', $localVersion)) {
+                        $initVersion = $localVersion['version'];
+                    }
+                }
+
+                if($this->getIntKey($initVersion) <= $this->getIntKey($globalVersion['version'])) {
+
+                    $dir = opendir($this->config->getOption('migration_path'));
+                    $files = [];
+                    while ($file = readdir($dir)) {
+                        if (preg_match('/\.migration\.' . $this->config->getOption('format') . '/i', $file)) {
+                            $files[] = $file;
+                        }
+                    }
+
+                    // Формирование последовательного массива миграций
+                    $max = $globalVersion['version'];
+                    if($last) {
+                        if($this->getIntKey($last) <= $this->getIntKey($globalVersion['version'])) {
+                            $max = $last;
+                        }
+                    }
+                    $output = $this->getMigrationsArray($files, $initVersion, $max);
+
+                } else {
+                    $this->output->writeln('<error>Global and local versions are idential.</error>');
+                }
+            }
+        }
+
+        return $output;
+    }
+
+    /**
+     * Формирует массив миграций, упорядоченный по порядку применения
+     * Берутся мирации, чьи ключи находятся между $min и $max значениями
+     *
+     * @param array $files - массив названий файлов миграций
+     * @param string $min - минимальный ключ миграции
+     * @param string $max - максимальный ключ миграции
+     * @return array
+     */
+    public function getMigrationsArray($files, $min, $max) {
+
+        $output = [];
+
+        $keyMin = $this->getIntKey($min);
+        $keyMax = $this->getIntKey($max);
+        foreach($files as $file) {
+            $strKey = explode('.', $file)[0];
+            $key = $this->getIntKey($strKey);
+            if($key >= $keyMin && $key <= $keyMax) {
+                if($migration = file_get_contents($this->config->getOption('migration_path').$file)) {
+                    $output[$key] = $this->formatCoder->decodeData($migration, $this->config->getOption('format'));
+                }
+            }
+        }
+
+        if(!empty($output)) {
+            ksort($output);
+        }
+
+        return $output;
+    }
+
 
     /**
      * Создание новой миграции
      *
      * @var bool $init - маркер инициализирующей миграции
+     * @return bool
      */
     public function writeMigration($init = false)
     {
-        $localVersion = $globalVersion = null;
+        $output = false;
 
         // Чтение информации о локальной версии миграций
-        if(file_exists($this->config->getOption('local_version_file').".".$this->config->getOption('format'))) {
-            $localVersion = file_get_contents($this->config->getOption('local_version_file').".".$this->config->getOption('format'));
-            if($localVersion) {
-                $localVersion = $this->formatCoder->decodeData($localVersion, $this->config->getOption('format'));
-            }
-        }
+        $localVersion = $this->getVersion('local');
 
         //  Чтение информации о глобальной версии файла
-        if(file_exists($this->config->getOption('global_version_file').".".$this->config->getOption('format'))) {
-            $globalVersion = file_get_contents($this->config->getOption('global_version_file').".".$this->config->getOption('format'));
-            if($globalVersion) {
-                $globalVersion = $this->formatCoder->decodeData($globalVersion, $this->config->getOption('format'));
-            }
-        }
+        $globalVersion = $this->getVersion('global');
 
         // Если локальная версия не совпадает с глобальной - выводим сообщение о необходимости апдейта
         if($localVersion != $globalVersion) {
-            $this->output->writeln('<error>Global ang local versions are different. You need to use migration:migrate to apply latest version to DB.</error>');
+            $this->output->writeln('<error>Global and local versions are different. You need to use migrations:migrate to apply latest version to DB.</error>');
         }
 
-        // Если ещё не создано ни локальной ни глобальной версии - создаем стартовую миграцию
+        // Если ещё не создано ни локальной ни глобальной версии - создаем стартовую миграцию или просим вызвать initialize
         else if (!$localVersion && !$globalVersion) {
-            $this->output->writeln('<info>No migrations created. Creating start migration.</info>');
-            $this->writeInitMigration();
+            if($init) {
+                $this->output->writeln('<info>No migrations created. Creating start migration.</info>');
+                $this->writeInitMigration();
+            } else {
+                $this->output->writeln('<error>No migrations created. You need to use migrations:initialize to create first migration!</error>');
+            }
         }
 
         // Если версии существуют и они равны - пытаемся содать новую миграцию
@@ -95,9 +184,13 @@ class MigrationCollector
                 $this->output->writeln('<error>Migrations already exists. No need to initialize!</error>');
             } else {
                 $this->output->writeln('<info>Try to generate new migration</info>');
-                $this->generateMigration();
+                if($this->generateMigration()) {
+                    $output = true;
+                }
             }
         }
+
+        return $output;
     }
 
     /**
@@ -113,6 +206,8 @@ class MigrationCollector
     }
 
     public function generateMigration() {
+        $output = false;
+
         $newSchema = $this->structureParser->getSchema();
         $startSchema = $this->getInitMigration();
         if($newSchema && $startSchema) {
@@ -120,6 +215,7 @@ class MigrationCollector
             if($migration) {
                 if($this->createMigration($migration)) {
                     $this->output->writeln('<info>Migration created successfully.</info>');
+                    $output = true;
                 }
             } else {
                 $this->output->writeln('<error>No differences between DB and locsl schema!</error>');
@@ -127,6 +223,8 @@ class MigrationCollector
         } else {
             $this->output->writeln('<error>Cannot generate new migration!</error>');
         }
+
+        return $output;
     }
 
     /**
@@ -138,7 +236,7 @@ class MigrationCollector
     public function createMigration($migration) {
         $output = false;
 
-        $name = strftime($this->config->getOption('time_format'));
+        $name = date($this->config->getOption('time_format'));
         $path = $this->config->getOption('migration_path').$name.'.migration.'.$this->config->getOption('format');
         $migrationString = $this->formatCoder->encodeData($migration, $this->config->getOption('format'));
         if(file_put_contents($path, $migrationString)) {
@@ -152,6 +250,24 @@ class MigrationCollector
         }
 
         return $output;
+    }
+
+    /**
+     * Получение массива версии
+     *
+     * @param string $type - тип версии (local/global)
+     * @return array
+     */
+    public function getVersion($type = 'local') {
+        $version = array();
+        if(file_exists($this->config->getOption($type.'_version_file').".".$this->config->getOption('format'))) {
+            $localVersion = file_get_contents($this->config->getOption($type.'_version_file').".".$this->config->getOption('format'));
+            if($localVersion) {
+                $version = $this->formatCoder->decodeData($localVersion, $this->config->getOption('format'));
+            }
+        }
+
+        return $version;
     }
 
     /**
@@ -215,11 +331,11 @@ class MigrationCollector
             }
 
             // Если есть таблица с таким же комментарием
-            else if($table = $this->searchComment($tvalue['comment'], $newSchema)) {
-                if($sameTable = $this->getTableDiff($tvalue, $table)) {
+            else if($tableKey = $this->searchComment($tvalue['comment'], $newSchema)) {
+                if($sameTable = $this->getTableDiff($tvalue, $newSchema[$tableKey])) {
                     $diff[$tkey] = $sameTable;
                 }
-                unset($newSchema[$tkey]);
+                unset($newSchema[$tableKey]);
             }
 
             // Таблица удаляется
@@ -258,11 +374,11 @@ class MigrationCollector
             }
 
             // Если есть столбец с таким же комментарием
-            else if($column = $this->searchComment($cvalue['comment'], $newTable['columns'])) {
-                if($sameColumn = $this->getColumnDiff($cvalue, $column)) {
+            else if($columnKey = $this->searchComment($cvalue['comment'], $newTable['columns'])) {
+                if($sameColumn = $this->getColumnDiff($cvalue, $newTable['columns'][$columnKey])) {
                     $diff['columns'][$ckey] = $sameColumn;
                 }
-                unset($newTable['columns'][$ckey]);
+                unset($newTable['columns'][$columnKey]);
             }
 
             // Столбец удаляется
@@ -445,19 +561,20 @@ class MigrationCollector
     }
 
     /**
-     * Поиск в масииве такого же комментария
+     * Поиск в масииве такого же комментария.
+     * Возвращает ключ массива
      *
      * @param string $comment - строка комментария
      * @param array $haystack - массив для поиска
-     * @return array
+     * @return string
      */
     public function searchComment($comment, $haystack) {
-        $output = array();
+        $output = '';
 
         foreach($haystack as $k => $v) {
             if(array_key_exists('comment', $v)) {
                 if($v['comment'] == $comment) {
-                    $output = $v;
+                    $output = $k;
                 }
             }
         }
