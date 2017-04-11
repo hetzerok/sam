@@ -10,6 +10,8 @@ namespace Opencolour\Migrations\Commands;
 use Opencolour\Additions\Config;
 use Opencolour\Migrations\MigrationCollector;
 use Opencolour\Migrations\QueryMaker;
+use Opencolour\Migrations\StructureParser;
+use Opencolour\Migrations\FormatCoder;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -46,7 +48,9 @@ EOT
     {
 
         $config = Config::getInstance();
-        $migrationCollector = new MigrationCollector();
+        $formatCoder = new FormatCoder();
+        $structureParser = new StructureParser($formatCoder, $output);
+        $migrationCollector = new MigrationCollector($formatCoder, $output, $structureParser);
         $queryMaker = new QueryMaker();
 
         //TODO здесь конечно более сложная сборка с параметрами версий должна быть

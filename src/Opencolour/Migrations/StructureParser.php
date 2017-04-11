@@ -200,7 +200,10 @@ class StructureParser
             if(!array_key_exists($ind['Key_name'], $indArray)) {
                 $indArray[$ind['Key_name']] = [
                     'name' => $ind['Key_name'],
-                    'columns' => array($ind['Seq_in_index'] => $ind['Column_name']),
+                    'columns' => array($ind['Seq_in_index'] => array(
+                        'name' => $ind['Column_name'],
+                        'sub_part' => $ind['Sub_part'],
+                    )),
                     'unique' => !$ind['Non_unique'],
                     'type' => $ind['Index_type'],
                     'comment' => $ind['Index_comment'],
@@ -208,7 +211,10 @@ class StructureParser
 
                 ];
             } else {
-                $indArray[$ind['Key_name']]['columns'][$ind['Seq_in_index']] = $ind['Column_name'];
+                $indArray[$ind['Key_name']]['columns'][$ind['Seq_in_index']] = array(
+                    'name' => $ind['Column_name'],
+                    'sub_part' => $ind['Sub_part'],
+                );
             }
         }
         $tableArray['indexes'] = $indArray;

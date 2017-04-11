@@ -246,33 +246,88 @@ class MigrationCollector
 
         $diff = array_diff_assoc($newTable, $startTable);
 
+        // Сравнение по столбцам
         foreach($startTable['columns'] as $ckey => $cvalue) {
 
             // Если есть столбец с таким же названием
             if(array_key_exists($ckey, $newTable['columns'])) {
                 if($sameColumn = $this->getColumnDiff($cvalue, $newTable['columns'][$ckey])) {
-                    $diff[$ckey] = $sameColumn;
+                    $diff['columns'][$ckey] = $sameColumn;
                 }
                 unset($newTable['columns'][$ckey]);
             }
 
-            // Если есть таблица с таким же комментарием
+            // Если есть столбец с таким же комментарием
             else if($column = $this->searchComment($cvalue['comment'], $newTable['columns'])) {
                 if($sameColumn = $this->getColumnDiff($cvalue, $column)) {
-                    $diff[$ckey] = $sameColumn;
+                    $diff['columns'][$ckey] = $sameColumn;
                 }
                 unset($newTable['columns'][$ckey]);
             }
 
-            // Таблица удаляется
+            // Столбец удаляется
             else {
-                $diff[$ckey]['action'] = 'drop';
+                $diff['columns'][$ckey]['action'] = 'drop';
             }
         }
 
         // Дальше учтем вновь созданные столбцы
-        $diff = array_merge($diff, $newTable['columns']);
+        if($newTable['columns']) {
+            if(!$diff['columns']) {
+                $diff['columns'] = array();
+            }
+            $diff['columns'] = array_merge($diff['columns'], $newTable['columns']);
+        }
 
+        // Сравнение по индексам
+        foreach ($startTable['indexes'] as $ikey => $ivalue) {
+
+            // Если есть индекс с таким же названием
+            if(array_key_exists($ikey, $newTable['indexes'])) {
+                if($sameIndex = $this->getIndexDiff($ivalue, $newTable['indexes'][$ikey])) {
+                    $diff['indexes'][$ikey] = $sameIndex;
+                }
+            }
+
+            // Иначе индекс удаляется
+            else {
+                $diff['indexes'][$ikey]['action'] = 'drop';
+            }
+        }
+
+        // Дальше учтем вновь созданные индексы
+        if($newTable['indexes']) {
+            if(!$diff['indexes']) {
+                $diff['indexes'] = array();
+            }
+            $diff['indexes'] = array_merge($diff['indexes'], $newTable['indexes']);
+        }
+
+        // Сравнение по внешним ключам
+        foreach ($startTable['foreignKeys'] as $fkey => $fvalue) {
+
+            // Если есть внешний ключ с таким же названием
+            if(array_key_exists($fkey, $newTable['foreignKeys'])) {
+                if($sameFK = $this->getForeignKeyDiff($fvalue, $newTable['foreignKeys'][$fkey])) {
+                    $diff['foreignKeys'][$fkey] = $sameFK;
+                }
+            }
+
+            // иначе внешний ключ удаляется
+            else {
+                $diff['foreignKeys'][$fkey]['action'] = 'drop';
+            }
+        }
+
+        // Дальше учтем вновь созданные внешние ключи
+        if($newTable['foreignKeys']) {
+            if(!$diff['foreignKeys']) {
+                $diff['foreignKeys'] = array();
+            }
+            $diff['foreignKeys'] = array_merge($diff['foreignKeys'], $newTable['foreignKeys']);
+        }
+
+        // Если разница в таблицах существуем присваиваем действие alter
         if($diff) {
             $diff['action'] = 'alter';
         }
@@ -292,6 +347,98 @@ class MigrationCollector
 
         if($diff = array_diff_assoc($newColumn, $startColumn)) {
             $diff['action'] = 'change';
+        }
+
+        return $diff;
+    }
+
+    /**
+     * Получает различия между массивами индекса
+     *
+     * @param array $startIndex - начальный вариант массива индекса
+     * @param array $newIndex - измененный вариант массива индекса
+     * @return array
+     */
+    public function getIndexDiff($startIndex, $newIndex) {
+        $diff = array();
+
+        if(array_diff_assoc($newIndex, $startIndex)) {
+            $diff = $newIndex;
+            $diff['action'] = 'change';
+        } else {
+            if($newIndex['columns'] && $startIndex['columns']) {
+                if($this->isIndexColumnsDifferent($startIndex['columns'], $newIndex['columns'])) {
+                    $diff = $newIndex;
+                    $diff['action'] = 'change';
+                }
+            }
+        }
+
+        return $diff;
+    }
+
+    /**
+     * Получает различия между массивами внешнего ключа
+     *
+     * @param array $startKey
+     * @param array $newKey
+     * @return array
+     */
+    public function getForeignKeyDiff($startKey, $newKey) {
+        $diff = array();
+
+        if(array_diff_assoc($newKey, $startKey)) {
+            $diff = $newKey;
+            $diff['action'] = 'change';
+        } else {
+            $hasDiff = false;
+            if($newKey['localKeys'] && $startKey['localKeys']) {
+                $hasDiff = array_diff_assoc($newKey['localKeys'], $startKey['localKeys']);
+            }
+            if(!$hasDiff) {
+                if($newKey['foreignKeys'] && $startKey['foreignKeys']) {
+                    $hasDiff = array_diff_assoc($newKey['foreignKeys'], $startKey['foreignKeys']);
+                }
+            }
+            if($hasDiff) {
+                $diff = $newKey;
+                $diff['action'] = 'change';
+            }
+        }
+
+        return $diff;
+    }
+
+    /**
+     * Проверяет на наличие различий в списках столбцов (Индексов или Внешних ключей)
+     *
+     * @param array $startColumns - начальный вариант массива списка столбцов
+     * @param array $newColumns - измененный вариант массива списка столбцов
+     * @return bool
+     */
+    public function isIndexColumnsDifferent($startColumns, $newColumns) {
+        $diff = false;
+
+        // Проверим каждый столбец из массивов на равенство
+        foreach($startColumns as $key => $col) {
+            if(array_key_exists($key, $newColumns)) {
+                if(array_diff_assoc($newColumns[$key], $col)) {
+                    $diff = true;
+                    break;
+                } else {
+                    unset($newColumns[$key]);
+                }
+            } else {
+                $diff = true;
+                break;
+            }
+        }
+
+        // Если в новом массиве что-то осталось то они не равны
+        if(!$diff) {
+            if ($newColumns) {
+                $diff = true;
+            }
         }
 
         return $diff;
