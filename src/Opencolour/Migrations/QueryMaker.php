@@ -129,7 +129,7 @@ class QueryMaker
 
                         $sql .= ';';
 
-                        if ($this->pdo->query($sql)) {
+                        if (!$this->pdo->query($sql)) {
                             $flag = false;
                         }
                     } // Удаляем таблицу
@@ -147,19 +147,21 @@ class QueryMaker
         }
 
         // Цикл для добавления constraints (чтобы быть уверенными в существовании столбцов)
-        foreach ($schema as $table) {
+        foreach ($schema as $table_key => $table) {
 
-            if ($table['foreignKeys']) {
-                $sql = "ALTER TABLE `".$this->config->getOption(
-                        'table_prefix'
-                    ).$table_key."` ".$this->alterQueryForeignKeys($table['foreignKeys']).";";
-                if (!$this->pdo->query($sql)) {
-                    $flag = false;
+            if($flag) {
+                if ($table['foreignKeys']) {
+                    $sql = "ALTER TABLE `".$this->config->getOption(
+                            'table_prefix'
+                        ).$table_key."`".$this->alterQueryForeignKeys($table['foreignKeys']).";";
+                    if (!$this->pdo->query($sql)) {
+                        $flag = false;
+                    }
                 }
             }
         }
 
-        return !$flag;
+        return $flag;
     }
 
     public function generateColumnQuery($col)
@@ -293,8 +295,15 @@ class QueryMaker
         } else {
             if ($ind['type'] == 'FULLTEXT') {
                 $vid = 'FULLTEXT INDEX `'.$ind['name'].'`';
-            } else {
-                $vid = 'INDEX `'.$ind['name'].'`';
+            } else if($ind['type'] == 'SPATIAL') {
+                $vid = 'SPATIAL INDEX `'.$ind['name'].'`';
+            }
+            else {
+                if($ind['unique']) {
+                    $vid = 'UNIQUE INDEX `'.$ind['name'].'`';
+                } else {
+                    $vid = 'INDEX `'.$ind['name'].'`';
+                }
             }
         }
 
@@ -349,7 +358,12 @@ class QueryMaker
     {
         $sql = ' ';
         $i = 0;
-        foreach ($indexes as $ind) {
+        foreach ($indexes as $key => $ind) {
+
+            // Добавляем имя из ключа если нужно
+            if(!array_key_exists('name', $ind)) {
+                $ind['name'] = $key;
+            }
 
             // Верная расстановка запятых
             if ($i > 0) {
@@ -360,7 +374,7 @@ class QueryMaker
             if ($ind['action']) {
                 $vid = $this->getIndexVid($ind);
                 $action = 'DROP '.$vid;
-                if ($ind['action'] = 'change') {
+                if ($ind['action'] == 'change') {
                     $action .= ', ADD '.$this->generateIndexQuery($ind);
                 }
             } else {
@@ -406,7 +420,7 @@ class QueryMaker
     public function getForeignKeyVid($key)
     {
 
-        $vid = 'CONSTRAINT '.$key['name'];
+        $vid = 'CONSTRAINT `'.$key['name'].'`';
 
         return $vid;
     }
@@ -458,6 +472,11 @@ class QueryMaker
 
         $sql = $vid.$local.' '.$foreign;
 
+        // Дополднительное
+        if($key['add']) {
+            $sql .= ' ' . $key['add'];
+        }
+
         return $sql;
     }
 
@@ -471,7 +490,12 @@ class QueryMaker
     {
         $sql = ' ';
         $i = 0;
-        foreach ($keys as $key) {
+        foreach ($keys as $k => $key) {
+
+            // Добавляем имя из ключа если нужно
+            if(!array_key_exists('name', $key)) {
+                $key['name'] = $k;
+            }
 
             // Верная расстановка запятых
             if ($i > 0) {
@@ -482,7 +506,7 @@ class QueryMaker
             if ($key['action']) {
                 $vid = $this->getForeignKeyVid($key);
                 $action = 'DROP '.$vid;
-                if ($key['action'] = 'change') {
+                if ($key['action'] == 'change') {
                     $action .= ', ADD '.$this->generateForeignKeyQuery($key);
                 }
             } else {

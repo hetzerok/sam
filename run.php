@@ -18,7 +18,7 @@ $commandsArray = array(
 );
 
 // Инициализируем команды
-$application = new Application('MODX console', 'v 0.0.1');
+$application = new Application('MODX console', 'v 0.0.2');
 foreach ($commandsArray as $commandName) {
     $command = new $commandName();
     $application->add($command);

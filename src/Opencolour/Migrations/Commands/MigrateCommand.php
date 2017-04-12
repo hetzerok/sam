@@ -35,7 +35,7 @@ class MigrateCommand extends Command {
         $this->setName("migrations:migrate")
             ->setDescription("Applying of migrations")
             ->setDefinition(array(
-                new InputOption('last', 'l', InputOption::VALUE_OPTIONAL, 'Last version of applyed migration', $start),
+                new InputOption('last', 'l', InputOption::VALUE_REQUIRED, 'Last version of applyed migration', $start),
             ))
             ->setHelp(<<<EOT
 Here is description of applying
@@ -52,13 +52,17 @@ EOT
         $migrationCollector = new MigrationCollector($formatCoder, $output, $structureParser);
         $queryMaker = new QueryMaker();
 
+        // Обрабатываем миграции по очереди
         $migrations = $migrationCollector->getCurrentMigrations($input->getOption('last'));
         if(!empty($migrations)) {
             foreach ($migrations as $key => $migration) {
                 if ($queryMaker->schemaQuery($migration)) {
                     $output->writeln('<info>Migration '.$key.' applied successfull.</info>');
+                    $structureParser->generateLocalSchema();
+                    $migrationCollector->upVersion($key, 'local');
                 } else {
                     $output->writeln('<error>Migration '.$key.' not applied.</error>');
+                    break;
                 }
             }
         } else {

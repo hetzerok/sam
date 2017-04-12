@@ -227,13 +227,15 @@ class StructureParser
         $constraints = $this->pdo->query('SHOW CREATE TABLE `' . $this->config->getOption('table_prefix') . $tableName . '`')->fetchAll(\PDO::FETCH_COLUMN, 1);
         $create_table = $constraints[0];
         $matches = array();
-        $regexp = '/CONSTRAINT\s+([^\(^\s]+)\s+FOREIGN KEY\s+\(([^\)]+)\)\s+REFERENCES\s+([^\(^\s]+)\s*\(([^\)]+)\)/mi';
+        //$regexp = '/CONSTRAINT\s+([^\(^\s]+)\s+FOREIGN KEY\s+\(([^\)]+)\)\s+REFERENCES\s+([^\(^\s]+)\s*\(([^\)]+)\)/mi';
+        $regexp = '/CONSTRAINT\s+([^\(^\s]+)\s+FOREIGN KEY\s+\(([^\)]+)\)\s+REFERENCES\s+([^\(^\s]+)\s*\(([^\)]+)\)\s*(.*)(\;|\,|\s\))/mi';
         preg_match_all($regexp, $create_table, $matches, PREG_SET_ORDER);
         foreach ($matches as $match) {
             $name = str_replace(array('`', '"'), '', $match[1]);
             $foreign = str_replace(array('`', '"'), '', $match[3]);
             $keys = array_map('trim', explode(',', str_replace(array('`', '"'), '', $match[2])));
             $fks = array_map('trim', explode(',', str_replace(array('`', '"'), '', $match[4])));
+            $add = trim($match[5]);
 
             // Учитываем связи только для таблиц с заданным префиксом
             if(preg_match('/^' . $this->config->getOption('table_prefix') . '/', $foreign )) {
@@ -243,6 +245,7 @@ class StructureParser
                     $tableArray['foreignKeys'][$name]['foreignTable'] = $foreign;
                     $tableArray['foreignKeys'][$name]['localKeys'] = $keys;
                     $tableArray['foreignKeys'][$name]['foreignKeys'] = $fks;
+                    $tableArray['foreignKeys'][$name]['add'] = $add;
                     if (isset($tableArray['columns'][$name])) {
                         $tableArray['columns'][$name]['isForeignKey'] = true;
                     }
@@ -252,77 +255,6 @@ class StructureParser
 
         return $tableArray;
     }
-
-//    public function normalize(&$schema)
-//    {
-//        foreach ($schema as &$table) {
-//            if (count($table['foreignKeys']) > 0) {
-//                foreach ($table['foreignKeys'] as $k => $v) {
-//                    list($targetTable, $targetColumn) = $v;
-//                    $table['columns'][$k]['relation'] = [
-//                        'type' => 'belongs-to-one',
-//                        'table' => $targetTable,
-//                    ];
-//                    //update other side of relation
-//                    $schema[$targetTable]['relations'][$table['name']] = [
-//                        'type' => 'has-many',
-//                        'table' => $table['name'],
-//                        'column' => $k,
-//                    ];
-//                }
-//            }
-//        }
-//        //working out many-to-many connector tables
-//        foreach ($schema as &$table) {
-//            $isRelationTable = true;
-//            if (
-//                count($table['foreignKeys']) > 0 && //if it has foreign keys
-//                count($table['foreignKeys']) == 2 && // only 2 foreign keys
-//                is_array($table['primaryKey']) && // has more than one primary key
-//                count($table['primaryKey']) >= 2 // at least 2 primary keys
-//            ) {
-//                //if all it's foreign keys are also primary keys
-//                foreach ($table['foreignKeys'] as $k => $fk) {
-//                    if (!in_array($k, $table['primaryKey'])) {
-//                        $isRelationTable = false;
-//                        break;
-//                    }
-//                }
-//            } else {
-//                $isRelationTable = false;
-//            }
-//            if ($isRelationTable) {
-//                $i = 0;
-//                $referencedTables = [];
-//                $connections = [];
-//                foreach ($table['foreignKeys'] as $k => $fk) {
-//                    $referencedTables[$i] = $fk[0];
-//                    $connections[$i] = $k;
-//                    $i++;
-//                }
-//                unset($schema[$referencedTables[0]]['relations'][$table['name']]);
-//                unset($schema[$referencedTables[1]]['relations'][$table['name']]);
-//                $schema[$referencedTables[1]]['relations'][$referencedTables[0]] = [
-//                    'type' => 'has-many',
-//                    'table' => $referencedTables[0],
-//                    'column' => $connections[1],
-//                    'via' => $table['name'],
-//                    'selfColumn' => $connections[0],
-//                ];
-//                $schema[$referencedTables[0]]['relations'][$referencedTables[1]] = [
-//                    'type' => 'has-many',
-//                    'table' => $referencedTables[1],
-//                    'column' => $connections[0],
-//                    'via' => $table['name'],
-//                    'selfColumn' => $connections[1],
-//                ];
-//                foreach ($schema[$table['name']]['columns'] as $k => &$v) {
-//                    unset($v['relation']);
-//                }
-//                $schema[$table['name']]['is_connector_table'] = true;
-//            }
-//        }
-//    }
 
     public function prepareSchema($schema)
     {

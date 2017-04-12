@@ -132,15 +132,21 @@ class MigrationCollector
         foreach($files as $file) {
             $strKey = explode('.', $file)[0];
             $key = $this->getIntKey($strKey);
-            if($key >= $keyMin && $key <= $keyMax) {
+            if($key > $keyMin && $key <= $keyMax) {
                 if($migration = file_get_contents($this->config->getOption('migration_path').$file)) {
                     $output[$key] = $this->formatCoder->decodeData($migration, $this->config->getOption('format'));
                 }
             }
         }
 
+        // Упорядочиваем ключи и приводим их вновь к строковому виду
         if(!empty($output)) {
+            $out = [];
             ksort($output);
+            foreach($output as $k => $v) {
+                $out[date($this->config->getOption('time_format'), $k)] = $v;
+            }
+            $output = $out;
         }
 
         return $output;
@@ -331,11 +337,13 @@ class MigrationCollector
             }
 
             // Если есть таблица с таким же комментарием
-            else if($tableKey = $this->searchComment($tvalue['comment'], $newSchema)) {
-                if($sameTable = $this->getTableDiff($tvalue, $newSchema[$tableKey])) {
-                    $diff[$tkey] = $sameTable;
+            else if($tvalue['comment']) {
+                if($tableKey = $this->searchComment($tvalue['comment'], $newSchema)) {
+                    if ($sameTable = $this->getTableDiff($tvalue, $newSchema[$tableKey])) {
+                        $diff[$tkey] = $sameTable;
+                    }
+                    unset($newSchema[$tableKey]);
                 }
-                unset($newSchema[$tableKey]);
             }
 
             // Таблица удаляется
@@ -403,6 +411,7 @@ class MigrationCollector
                 if($sameIndex = $this->getIndexDiff($ivalue, $newTable['indexes'][$ikey])) {
                     $diff['indexes'][$ikey] = $sameIndex;
                 }
+                unset($newTable['indexes'][$ikey]);
             }
 
             // Иначе индекс удаляется
@@ -427,6 +436,7 @@ class MigrationCollector
                 if($sameFK = $this->getForeignKeyDiff($fvalue, $newTable['foreignKeys'][$fkey])) {
                     $diff['foreignKeys'][$fkey] = $sameFK;
                 }
+                unset($newTable['foreignKeys'][$fkey]);
             }
 
             // иначе внешний ключ удаляется
@@ -443,7 +453,7 @@ class MigrationCollector
             $diff['foreignKeys'] = array_merge($diff['foreignKeys'], $newTable['foreignKeys']);
         }
 
-        // Если разница в таблицах существуем присваиваем действие alter
+        // Если разница в таблицах существует присваиваем действие alter
         if($diff) {
             $diff['action'] = 'alter';
         }
@@ -459,9 +469,10 @@ class MigrationCollector
      * @return array
      */
     public function getColumnDiff($startColumn, $newColumn) {
-        $diff = array();
+        $diff = [];
 
-        if($diff = array_diff_assoc($newColumn, $startColumn)) {
+        if(array_diff_assoc($newColumn, $startColumn)) {
+            $diff = $newColumn;
             $diff['action'] = 'change';
         }
 

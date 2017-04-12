@@ -5,7 +5,10 @@
 /db/local.version
 
 #dev_mode
-/db/datas
-/db/migrations
-/db/schemas
+/db/datas/*
+!/db/datas/.gitkeep
+/db/migrations/*
+!/db/migrations/.gitkeep
+/db/schemas/*
+!/db/schemas/.gitkeep
 /db/*.version.json
