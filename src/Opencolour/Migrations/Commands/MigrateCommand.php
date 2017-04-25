@@ -50,7 +50,7 @@ EOT
         $formatCoder = new FormatCoder();
         $structureParser = new StructureParser($formatCoder, $output);
         $migrationCollector = new MigrationCollector($formatCoder, $output, $structureParser);
-        $queryMaker = new QueryMaker();
+        $queryMaker = new QueryMaker($output);
 
         // Обрабатываем миграции по очереди
         $migrations = $migrationCollector->getCurrentMigrations($input->getOption('last'));
@@ -64,11 +64,30 @@ EOT
                     $output->writeln('<error>Migration '.$key.' not applied.</error>');
                     break;
                 }
+
+                // В случае если установлена опция import_data проводим миграции данных
+                $contentMigrations = $migrationCollector->getCurrentContentMigrations($key, $migrations);
+                if(!empty($contentMigrations)) {
+                    foreach ($contentMigrations as $ckey => $cmigration) {
+                        if($queryMaker->contentQuery($cmigration)) {
+                            $output->writeln('<info>Content migration '.$ckey.' applied successfull.</info>');
+                            $structureParser->generateLocalContent();
+                            $migrationCollector->upVersion($ckey, 'local');
+                        } else {
+                            $output->writeln('<error>Content migration '.$ckey.' not applied.</error>');
+                            break;
+                        }
+                    }
+                } else {
+                    $output->writeln('<error>Cannot find content migrations.</error>');
+                }
             }
         } else {
             $output->writeln('<error>Cannot find migrations.</error>');
         }
 
-        $output->writeln('<comment>Migration applying complete</comment>');
+        $style = new OutputFormatterStyle('green', 'white', array('bold'));
+        $output->getFormatter()->setStyle('end', $style);
+        $output->writeln('<end>Migration applying complete</end>');
     }
 }

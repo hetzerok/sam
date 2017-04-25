@@ -32,6 +32,9 @@ class StructureParser
     /* @var \PDO $pdo */
     protected $pdo = null;
 
+    /* @var array $currentSchema */
+    protected $currentSchema = [];
+
     /**
      * StructureParser constructor.
      *
@@ -53,16 +56,18 @@ class StructureParser
     public function initializeSchema()
     {
         $schema = $this->getSchema();
-        $schemaData = $this->prepareSchema($schema);
-        $this->writeSchema($schemaData, 'local');
-        $this->writeSchema($schemaData, 'global');
+        if($schemaData = $this->prepareSchema($schema)) {
+            $this->writeSchema($schemaData, 'local');
+            $this->writeSchema($schemaData, 'global');
+        }
 
         // В случае включения функционала миграций данных создаем схемы данных
         if ($this->config->getOption('import_data')) {
             $content = $this->getContent($schema);
-            $contentData = $this->prepareContent($content);
-            $this->writeContent($contentData, 'local');
-            $this->writeContent($contentData, 'global');
+            if($contentData = $this->prepareContent($content)) {
+                $this->writeContent($contentData, 'local');
+                $this->writeContent($contentData, 'global');
+            }
         }
     }
 
@@ -71,7 +76,7 @@ class StructureParser
      */
     public function generateLocalSchema()
     {
-        $schema = $this->getSchema();
+        $schema = $this->getSchema(true);
         $schemaData = $this->prepareSchema($schema);
         $this->writeSchema($schemaData);
     }
@@ -81,9 +86,31 @@ class StructureParser
      */
     public function generateGlobalSchema()
     {
-        $schema = $this->getSchema();
+        $schema = $this->getSchema(true);
         $schemaData = $this->prepareSchema($schema);
         $this->writeSchema($schemaData, 'global');
+    }
+
+    /**
+     * Генерирует файл локальных данных
+     */
+    public function generateLocalContent()
+    {
+        $schema = $this->getSchema(true);
+        $content = $this->getContent($schema);
+        $contentData = $this->prepareContent($content);
+        $this->writeContent($contentData, 'local');
+    }
+
+    /**
+     * Генерирует файл глобальных данных
+     */
+    public function generateGlobalContent()
+    {
+        $schema = $this->getSchema(true);
+        $content = $this->getContent($schema);
+        $contentData = $this->prepareContent($content);
+        $this->writeContent($contentData, 'global');
     }
 
     /**
@@ -113,7 +140,8 @@ class StructureParser
      * @param string $type - тип файла (local - локальная схема, global - глобальная схема)
      * @return bool
      */
-    public function writeContent($data, $type = 'local') {
+    public function writeContent($data, $type = 'local')
+    {
         $output = false;
         $path = $this->config->getOption('schema_path');
         $dataType = $this->config->getOption('schema_format');
@@ -128,46 +156,52 @@ class StructureParser
     /**
      * Формирование массива схемы текущей БД
      *
+     * @param boolean $up - флаг принудительного обновления схемы
      * @return array
      */
-    public function getSchema()
+    public function getSchema($up = false)
     {
         $schema = [];
-        $tables = $this->pdo->query('SHOW TABLE STATUS')->fetchAll(\PDO::FETCH_ASSOC);
-        foreach ($tables as $tableRow) {
+        if ($this->currentSchema && !$up) {
+            $schema = $this->currentSchema;
+        } else {
+            $tables = $this->pdo->query('SHOW TABLE STATUS')->fetchAll(\PDO::FETCH_ASSOC);
+            foreach ($tables as $tableRow) {
 
-            // Работаем только с таблицами с указанным префиксом
-            if (preg_match('/^'.$this->config->getOption('table_prefix').'/', $tableRow['Name'])) {
+                // Работаем только с таблицами с указанным префиксом
+                if (preg_match('/^'.$this->config->getOption('table_prefix').'/', $tableRow['Name'])) {
 
-                $tableName = mb_substr($tableRow['Name'], mb_strlen($this->config->getOption('table_prefix')));
+                    $tableName = mb_substr($tableRow['Name'], mb_strlen($this->config->getOption('table_prefix')));
 
-                // Создаем изначальную структуру элемента схемы
-                $tableArray = [
-                    'name' => $tableName,
-                    'engine' => $tableRow['Engine'],
-                    'collation' => $tableRow['Collation'],
-                    'comment' => $tableRow['Comment'],
-                    'primaryKey' => null,
-                    'columns' => [],
-                    'indexes' => [],
-                    'foreignKeys' => [],
-                ];
+                    // Создаем изначальную структуру элемента схемы
+                    $tableArray = [
+                        'name' => $tableName,
+                        'engine' => $tableRow['Engine'],
+                        'collation' => $tableRow['Collation'],
+                        'comment' => $tableRow['Comment'],
+                        'primaryKey' => null,
+                        'columns' => [],
+                        'indexes' => [],
+                        'foreignKeys' => [],
+                    ];
 
-                // Добавляем структуру столбцов
-                $tableArray = $this->getTableColumns($tableName, $tableArray);
+                    // Добавляем структуру столбцов
+                    $tableArray = $this->getTableColumns($tableName, $tableArray);
 
-                // Добавляем индексы
-                if ($this->config->getOption('conside_indexes')) {
-                    $tableArray = $this->getTableIndexes($tableName, $tableArray);
+                    // Добавляем индексы
+                    if ($this->config->getOption('conside_indexes')) {
+                        $tableArray = $this->getTableIndexes($tableName, $tableArray);
+                    }
+
+                    // Добавляем связи по внешним ключам
+                    if ($this->config->getOption('conside_foreign_keys')) {
+                        $tableArray = $this->getTableConstraints($tableName, $tableArray);
+                    }
+
+                    $schema[$tableName] = $tableArray;
                 }
-
-                // Добавляем связи по внешним ключам
-                if ($this->config->getOption('conside_foreign_keys')) {
-                    $tableArray = $this->getTableConstraints($tableName, $tableArray);
-                }
-
-                $schema[$tableName] = $tableArray;
             }
+            $this->currentSchema = $schema;
         }
 
         return $schema;
@@ -185,13 +219,27 @@ class StructureParser
         // Работем только с таблицами, указанныме в конфиге в параметре import_data_tables
         $tables = $this->config->getOption('import_data_tables');
         if (is_array($tables)) {
+
+            // Получим реальные таблицы из БД чтобы мзбежать запросов к несуществующим таблицам
+            $realTables = $this->pdo->query('SHOW TABLE STATUS')->fetchAll(\PDO::FETCH_ASSOC);
+            $tableArray = [];
+            foreach ($realTables as $tableRow) {
+
+                // Работаем только с таблицами с указанным префиксом
+                if (preg_match('/^'.$this->config->getOption('table_prefix').'/', $tableRow['Name'])) {
+                    $tableArray[] = mb_substr($tableRow['Name'], mb_strlen($this->config->getOption('table_prefix')));
+                }
+            }
+
+            // Получаем содержимое для каждой указанной валидной таблицы
             foreach ($tables as $tableName) {
-                $index = $schema[$tableName]['indexes']['PRIMARY'];
-                $tableData = $this->getTableData($tableName, $index);
-                $content[$tableName] = $tableData;
+                if(array_search($tableName, $tableArray) !== false) {
+                    $index = $schema[$tableName]['indexes']['PRIMARY'];
+                    $tableData = $this->getTableData($tableName, $index);
+                    $content[$tableName] = $tableData;
+                }
             }
         }
-
         return $content;
     }
 
@@ -221,12 +269,13 @@ class StructureParser
 
             // Если есть индекс - создаем запись о его столбцах
             $pk = [];
-            if($index && is_array($index)) {
+            if ($index && is_array($index)) {
                 $cols = $index['columns'];
-                if(is_array($cols)) {
-                    foreach($cols as $col) {
-                        $key = array_search($col['name'], $tableData['columns']);
-                        $pk[$key] = $col['name'];
+                if (is_array($cols)) {
+                    foreach ($cols as $col) {
+                        if (array_search($col['name'], $tableData['columns']) !== false) {
+                            $pk[] = $col['name'];
+                        }
                     }
                 }
             }
@@ -236,11 +285,14 @@ class StructureParser
                 'SELECT * FROM `'.$this->config->getOption('table_prefix').$tableName.'`'
             )->fetchAll(\PDO::FETCH_NUM);
             $tableData['data'] = [];
-            if($tableData['pk']) {
+            if ($tableData['pk']) {
                 foreach ($rawData as $row) {
                     $keymap = [];
-                    foreach($tableData['pk'] as $k=>$v) {
-                        $keymap[] = $row[$k];
+                    foreach ($tableData['pk'] as $v) {
+                        $k = array_search($v, $tableData['columns']);
+                        if ($k !== false) {
+                            $keymap[] = $row[$k];
+                        }
                     }
                     $key = implode('_', $keymap);
                     $tableData['data'][$key]['row'] = $row;
@@ -260,10 +312,9 @@ class StructureParser
         foreach ($state as $stat) {
             $ai = $stat['Auto_increment'];
         }
-        if($ai) {
+        if ($ai) {
             $tableData['ai'] = $ai;
         }
-
         return $tableData;
     }
 

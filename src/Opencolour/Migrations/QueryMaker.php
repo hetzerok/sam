@@ -8,6 +8,7 @@
 namespace Opencolour\Migrations;
 
 use Opencolour\Additions\Config;
+use Symfony\Component\Console\Output\OutputInterface;
 
 class QueryMaker
 {
@@ -18,18 +19,177 @@ class QueryMaker
     /* @var \PDO $pdo */
     protected $pdo = null;
 
+    /* @var OutputInterface $output */
+    protected $output = null;
+
     /**
-     * StructureParser constructor.
+     * QueryMaker constructor.
      */
-    public function __construct()
+    public function __construct(OutputInterface &$output)
     {
         $this->config = Config::getInstance();
         $this->pdo = $this->config->getConnection();
+        $this->output = $output;
+    }
+
+    public function contentQuery($content)
+    {
+        $flag = true;
+
+        $k_u = 0;
+        $k_i = 0;
+        $k_d = 0;
+        $k_u_n = 0;
+        $k_i_n = 0;
+        $k_d_n = 0;
+        foreach ($content as $key => $value) {
+
+            // Полная очистка таблицы если необходимо
+            if ($value['clear']) {
+                $sql = "TRUNCATE `".$this->config->getOption('table_prefix').$key."`;";
+                if (!$this->pdo->query($sql)) {
+                    $flag = false;
+                }
+            }
+
+            $insert = [];
+            $update = [];
+            $delete = [];
+            if(array_key_exists('data', $value)) {
+                foreach ($value['data'] as $rkey => $rvalue) {
+                    if ($rvalue['action'] == 'remove') {
+                        $delete[] = $rvalue['row'];
+                    } else {
+                        if ($rvalue['action'] == 'change') {
+                            $update[] = $rvalue['row'];
+                        } else {
+                            $insert[] = $rvalue['row'];
+                        }
+                    }
+                }
+            }
+
+            // Удаление строк
+            if ($delete) {
+                foreach ($delete as $drow) {
+                    if ($where = $this->makeWhereExpression($drow, $value['columns'], $value['pk'])) {
+                        $sql = "DELETE FROM `".$this->config->getOption('table_prefix').$key."` WHERE ".$where.";";
+                        if ($this->pdo->query($sql)) {
+                            $k_d++;
+                        } else {
+                            $k_d_n++;
+                        }
+                    } else {
+                        $k_d_n++;
+                    }
+                }
+            }
+
+            // Обновление строк
+            if ($update) {
+                foreach ($update as $urow) {
+                    if ($where = $this->makeWhereExpression($urow, $value['columns'], $value['pk'])) {
+                        $set = $this->makeSetExpression($urow, $value['columns'], $value['pk']);
+                        $sql = "UPDATE ".$this->config->getOption('table_prefix').$key." SET ".$set." WHERE ".$where.";";
+                        if ($this->pdo->query($sql)) {
+                            $k_u++;
+                        } else {
+                            $k_u_n++;
+                        }
+                    } else {
+                        $k_u_n++;
+                    }
+                }
+            }
+
+            // Добавление новых строк
+            if ($insert) {
+                foreach($insert as $irow) {
+                    if($ins = $this->makeInsertExpression($irow, $value['columns'])) {
+                        $sql = "INSERT INTO `".$this->config->getOption('table_prefix').$key."` ".$ins.";";
+                        if ($this->pdo->query($sql)) {
+                            $k_i++;
+                        } else {
+                            $k_i_n++;
+                        }
+                    } else {
+                        $k_i_n++;
+                    }
+                }
+            }
+
+            // Изменение автоинкремента
+            if($value['ai']) {
+                $sql = "ALTER TABLE `".$this->config->getOption('table_prefix').$key."`	AUTO_INCREMENT=".$value['ai'].";";
+                $this->pdo->query($sql);
+            }
+        }
+
+        $this->output->writeln('<comment>Deleted '.$k_d.' successfully and '.$k_d_n.' unsuccessfully.</comment>');
+        $this->output->writeln('<comment>Updated '.$k_u.' successfully and '.$k_u_n.' unsuccessfully.</comment>');
+        $this->output->writeln('<comment>Inserted '.$k_i.' successfully and '.$k_i_n.' unsuccessfully.</comment>');
+
+        return $flag;
+    }
+
+    public function makeInsertExpression($row, $cols) {
+        $ins = '';
+        $colmap = [];
+        $valmap = [];
+        foreach ($row as $k => $v) {
+            $colmap[] = "`".$cols[$k]."`";
+            $valmap[] = "'".$v."'";
+        }
+        $ins = "(".implode(', ', $colmap).") VALUES (".implode(', ', $valmap).")";
+
+        return $ins;
+    }
+
+    public function makeSetExpression($row, $cols, $pk)
+    {
+        $set = '';
+        $keymap = [];
+        if ($pk) {
+            foreach ($row as $k => $v) {
+                $key = array_search($v, $pk);
+                if ($key === false) {
+                    $keymap[] = "`".$cols[$k]."`='".$row[$k]."'";
+                }
+            }
+        } // В общем случае обновление без ключа не имеет смысла, но на всякий пусть будет
+        else {
+            foreach ($row as $k => $v) {
+                $keymap[] = "`".$cols[$k]."`='".$v."'";
+            }
+        }
+        $set = implode(', ', $keymap);
+
+        return $set;
+    }
+
+    public function makeWhereExpression($row, $cols, $pk)
+    {
+        $where = '';
+        $keymap = [];
+        if ($pk) {
+            foreach ($pk as $v) {
+                $k = array_search($v, $cols);
+                if ($k !== false) {
+                    $keymap[] = "`".$cols[$k]."`='".$row[$k]."'";
+                }
+            }
+        } else {
+            foreach ($row as $k => $v) {
+                $keymap[] = "`".$cols[$k]."`='".$v."'";
+            }
+        }
+        $where = implode(' AND ', $keymap);
+
+        return $where;
     }
 
     public function schemaQuery($schema)
     {
-
         $flag = true;
 
         // Цикл создания и заполнения таблиц
@@ -45,13 +205,9 @@ class QueryMaker
                     // Добавляем столбцы к таблице
                     $csql = $this->addQueryColumns($table['columns']);
 
-                    if (mb_strlen($csql) > 3) {
-                        $csql .= ',';
-                    }
-
                     // Добавляем индексы к таблице
                     if ($table['indexes']) {
-                        $csql .= $this->addQueryIndexes($table['indexes']);
+                        $csql .= ','.$this->addQueryIndexes($table['indexes']);
                     }
 
                     // Оборачиваем в скобки добавленные столбцы
@@ -149,7 +305,7 @@ class QueryMaker
         // Цикл для добавления constraints (чтобы быть уверенными в существовании столбцов)
         foreach ($schema as $table_key => $table) {
 
-            if($flag) {
+            if ($flag) {
                 if ($table['foreignKeys']) {
                     $sql = "ALTER TABLE `".$this->config->getOption(
                             'table_prefix'
@@ -274,7 +430,7 @@ class QueryMaker
             }
             $i++;
 
-            $sql .= "`" . $col['name'] . "` " . $this->generateColumnQuery($col);
+            $sql .= "`".$col['name']."` ".$this->generateColumnQuery($col);
         }
 
         return $sql;
@@ -295,14 +451,15 @@ class QueryMaker
         } else {
             if ($ind['type'] == 'FULLTEXT') {
                 $vid = 'FULLTEXT INDEX `'.$ind['name'].'`';
-            } else if($ind['type'] == 'SPATIAL') {
-                $vid = 'SPATIAL INDEX `'.$ind['name'].'`';
-            }
-            else {
-                if($ind['unique']) {
-                    $vid = 'UNIQUE INDEX `'.$ind['name'].'`';
+            } else {
+                if ($ind['type'] == 'SPATIAL') {
+                    $vid = 'SPATIAL INDEX `'.$ind['name'].'`';
                 } else {
-                    $vid = 'INDEX `'.$ind['name'].'`';
+                    if ($ind['unique']) {
+                        $vid = 'UNIQUE INDEX `'.$ind['name'].'`';
+                    } else {
+                        $vid = 'INDEX `'.$ind['name'].'`';
+                    }
                 }
             }
         }
@@ -361,7 +518,7 @@ class QueryMaker
         foreach ($indexes as $key => $ind) {
 
             // Добавляем имя из ключа если нужно
-            if(!array_key_exists('name', $ind)) {
+            if (!array_key_exists('name', $ind)) {
                 $ind['name'] = $key;
             }
 
@@ -473,8 +630,8 @@ class QueryMaker
         $sql = $vid.$local.' '.$foreign;
 
         // Дополднительное
-        if($key['add']) {
-            $sql .= ' ' . $key['add'];
+        if ($key['add']) {
+            $sql .= ' '.$key['add'];
         }
 
         return $sql;
@@ -493,7 +650,7 @@ class QueryMaker
         foreach ($keys as $k => $key) {
 
             // Добавляем имя из ключа если нужно
-            if(!array_key_exists('name', $key)) {
+            if (!array_key_exists('name', $key)) {
                 $key['name'] = $k;
             }
 

@@ -46,6 +46,8 @@ EOT
         $structureParser->initializeSchema();
         $migrationCollector->writeMigration(true);
 
-        $output->writeln('<comment>Initialization complete</comment>');
+        $style = new OutputFormatterStyle('green', 'white', array('bold'));
+        $output->getFormatter()->setStyle('end', $style);
+        $output->writeln('<end>Initialization complete</end>');
     }
 }

@@ -45,6 +45,8 @@ EOT
             $structureParser->initializeSchema();
         }
 
-        $output->writeln('<comment>Generating complete</comment>');
+        $style = new OutputFormatterStyle('green', 'white', array('bold'));
+        $output->getFormatter()->setStyle('end', $style);
+        $output->writeln('<end>Generating complete</end>');
     }
 }

@@ -117,27 +117,84 @@ class MigrationCollector
     }
 
     /**
+     * Получает ключ следующей по порядку миграции
+     *
+     * @param string $start - стартовый ключ миграции
+     * @param array $migrations - массив миграций
+     * @return mixed
+     */
+    public function getNextMigrationKey($start, &$migrations) {
+        $keys = array_keys($migrations);
+        $key = array_search($start, $keys);
+        $next = $keys[$key+1];
+
+        return $next;
+    }
+
+    /**
+     * Получает массив мишраций содержимого для текущего шага
+     *
+     * @param string $start - начальный ключ миграции
+     * @param array $migrations - массив миграций
+     * @return array
+     */
+    public function getCurrentContentMigrations($start, &$migrations)
+    {
+        $output = [];
+        if(!$end = $this->getNextMigrationKey($start, $migrations)) {
+            $end = date($this->config->getOption('time_format'));
+        }
+
+        $dir = opendir($this->config->getOption('data_path'));
+        $files = [];
+        while ($file = readdir($dir)) {
+            if (preg_match('/\.content-migration\.'.$this->config->getOption('format').'/i', $file)) {
+                $files[] = $file;
+            }
+        }
+
+        $output = $this->getMigrationsArray($files, $start, $end, 'content', true);
+
+        return $output;
+    }
+
+    /**
      * Формирует массив миграций, упорядоченный по порядку применения
      * Берутся мирации, чьи ключи находятся между $min и $max значениями
      *
      * @param array $files - массив названий файлов миграций
      * @param string $min - минимальный ключ миграции
      * @param string $max - максимальный ключ миграции
+     * @param string $type - ключ типа миграций+
+     * @param bool $current - флаг, обозначающий начало с текущего элемента
      * @return array
      */
-    public function getMigrationsArray($files, $min, $max)
+    public function getMigrationsArray($files, $min, $max, $type = 'structure', $current = false)
     {
-
         $output = [];
-
+        if($type == 'structure') {
+            $path = $this->config->getOption('migration_path');
+        } else if ($type == 'content') {
+            $path = $this->config->getOption('data_path');
+        } else {
+            return $output;
+        }
         $keyMin = $this->getIntKey($min);
         $keyMax = $this->getIntKey($max);
         foreach ($files as $file) {
             $strKey = explode('.', $file)[0];
             $key = $this->getIntKey($strKey);
-            if ($key > $keyMin && $key <= $keyMax) {
-                if ($migration = file_get_contents($this->config->getOption('migration_path').$file)) {
-                    $output[$key] = $this->formatCoder->decodeData($migration, $this->config->getOption('format'));
+            if($current) {
+                if ($key >= $keyMin && $key < $keyMax) {
+                    if ($migration = file_get_contents($path.$file)) {
+                        $output[$key] = $this->formatCoder->decodeData($migration, $this->config->getOption('migration_format'));
+                    }
+                }
+            } else {
+                if ($key > $keyMin && $key <= $keyMax) {
+                    if ($migration = file_get_contents($path.$file)) {
+                        $output[$key] = $this->formatCoder->decodeData($migration, $this->config->getOption('migration_format'));
+                    }
                 }
             }
         }
@@ -217,6 +274,8 @@ class MigrationCollector
             if ($this->createMigration($migration, $path, $name)) {
                 $this->output->writeln('<info>Migration created successfully.</info>');
             }
+        } else {
+            $this->output->writeln('<error>Cannot create empty migration!</error>');
         }
 
         // Если задана опция создания миграций для данных
@@ -227,10 +286,17 @@ class MigrationCollector
                 if ($this->createMigration($contentMigration, $path, $name)) {
                     $this->output->writeln('<info>Content migration created successfully.</info>');
                 }
+            } else {
+                $this->output->writeln('<error>Cannot create empty content migration!</error>');
             }
         }
     }
 
+    /**
+     * Генерирует новую миграцию
+     *
+     * @return bool
+     */
     public function generateMigration()
     {
         $output = false;
@@ -256,16 +322,21 @@ class MigrationCollector
 
         // Если установлена опция - создаем миграцию для содержимого
         if ($this->config->getOption('import_data')) {
-            $newContent = $this->structureParser->getContent();
+            $newContent = $this->structureParser->getContent($newSchema);
             $startContent = $this->getInitContent();
-            if ($newContent && $startContent) {
+            if ($newContent) {
                 $migration = $this->getContentDiff($startContent, $newContent);
-                $path = $this->getMigrationPath($name, 'content');
-                if ($this->createMigration($migration, $path, $name)) {
-                    $this->output->writeln('<info>Content migration created successfully.</info>');
-                    $output = true;
+                if ($migration) {
+                    $path = $this->getMigrationPath($name, 'content');
+                    if ($this->createMigration($migration, $path, $name)) {
+                        $this->output->writeln('<info>Content migration created successfully.</info>');
+                        $output = true;
+                    } else {
+                        $output = false;
+                    }
                 } else {
                     $this->output->writeln('<error>No differences between DB and local contents!</error>');
+                    $output = false;
                 }
             } else {
                 $this->output->writeln('<error>Cannot generate new content migration!</error>');
@@ -486,20 +557,145 @@ class MigrationCollector
         return $diff;
     }
 
+    /**
+     * Получает массив различий между содержимым БД
+     *
+     * @param array $startContent - массив начальных данных БД
+     * @param array $newContent - массив измененных данных БД
+     * @return array
+     */
     public function getContentDiff($startContent, $newContent)
     {
         $diff = [];
-        foreach($startContent as $tkey => $tvalue) {
+
+        // Обрабатываем существующие таблицы
+        foreach ($startContent as $tkey => $tvalue) {
 
             // Если есть таблица с таким же названием
-            // TODO здесь нужно работать с primary ключами
-            if(array_key_exists($tkey, $newContent)) {
-                if ($sameTable = $this->getTableDiff($tvalue, $newContent[$tkey])) {
+            if (array_key_exists($tkey, $newContent)) {
+                if ($sameTable = $this->getTableContentDiff($tvalue, $newContent[$tkey])) {
                     $diff[$tkey] = $sameTable;
                 }
                 unset($newContent[$tkey]);
             }
         }
+
+        // Обрабатываем новые таблицы
+        foreach($newContent as $tkey => $tvalue) {
+            $diff[$tkey] = $tvalue;
+        }
+
+        return $diff;
+    }
+
+    /**
+     * Получает массив различий между содержимым таблиц
+     *
+     * @param array $startTable - массив начальных данных таблицы
+     * @param array $newTable - массив измененных данных таблицы
+     * @return array
+     */
+    public function getTableContentDiff($startTable, $newTable)
+    {
+        $diff = [];
+        $renew = false;
+        $diff = array_diff_assoc($newTable, $startTable);
+
+        // Сравнение по столбцам
+        $columns = [];
+        if($newTable['columns']) {
+            $columns = $newTable['columns'];
+        }
+        if (array_diff($newTable['columns'], $startTable['columns'])) {
+            $renew = true;
+        }
+
+        // Сравнение по первичным ключам
+        $pk = [];
+        if($newTable['pk']) {
+            $pk = $newTable['pk'];
+        }
+        if (array_diff($newTable['pk'], $startTable['pk'])) {
+            $renew = true;
+        }
+
+        if (!$renew) {
+
+            // Сравнение по строкам
+            if($pk) {
+                foreach ($startTable['data'] as $key => $row) {
+
+                    // Если есть столбец с таким же ключом сравниваем их
+                    if (array_key_exists($key, $newTable['data'])) {
+                        if ($sameRow = $this->getRowContentDiff($row['row'], $newTable['data'][$key]['row'])) {
+                            $diff['data'][$key]['row'] = $sameRow;
+                            $diff['data'][$key]['action'] = 'change';
+                        }
+                        unset($newTable['data'][$key]);
+                    } // Иначе столбец удаляется
+                    else {
+                        $diff['data'][$key] = $row;
+                        $diff['data'][$key]['action'] = 'remove';
+                    }
+                }
+            } else {
+                foreach ($startTable['data'] as $key => $row) {
+                    // Если есть столбец с таким же ключом сравниваем их
+                    if (array_key_exists($key, $newTable['data'])) {
+                        if ($sameRow = $this->getRowContentDiff($row['row'], $newTable['data'][$key]['row'])) {
+                            $rowArray['row'] = $sameRow;
+                            $rowArray['action'] = 'remove';
+                            $diff['data'][] = $rowArray;
+                        } else {
+                            unset($newTable['data'][$key]);
+                        }
+                    } // Иначе столбец удаляется
+                    else {
+                        $rowArray = $row;
+                        $rowArray['action'] = 'remove';
+                        $diff['data'][] = $rowArray;
+                    }
+                }
+            }
+
+            // Если в новой таблице остались строки, то добавляем их к диффу в качестве создаваемых столбцов
+            foreach ($newTable['data'] as $nkey => $nrow) {
+                $diff['data'][$nkey] = $nrow;
+            }
+        }
+
+        // Тотальное обновление данных
+        else {
+            $diff['clear'] = '1';
+            foreach ($newTable['data'] as $nkey => $nrow) {
+                $diff['data'][$nkey] = $nrow;
+            }
+        }
+
+        // Если различаются данные в таблице добавляем первичные ключи и инфу по столбцам
+        if($diff['data']) {
+            $diff['pk'] = $pk;
+            $diff['columns'] = $columns;
+        }
+
+        return $diff;
+    }
+
+    /**
+     * Ишет различия между начальными и измененными данными строки и в случае наличия возвращает измененные данные
+     *
+     * @param array $startRow - массив начальных данных строки
+     * @param array $newRow - массив измененных данных строки
+     * @return array
+     */
+    public function getRowContentDiff($startRow, $newRow)
+    {
+        $diff = [];
+        if (array_diff_assoc($newRow, $startRow)) {
+            $diff = $newRow;
+        }
+
+        return $diff;
     }
 
     /**
