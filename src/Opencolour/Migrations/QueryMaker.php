@@ -32,6 +32,12 @@ class QueryMaker
         $this->output = $output;
     }
 
+    /**
+     * Выполняет восстановление данных из массива(миграции) в БД
+     *
+     * @param array $content - данные для совершения запроса (миграция)
+     * @return bool
+     */
     public function contentQuery($content)
     {
         $flag = true;
@@ -132,6 +138,13 @@ class QueryMaker
         return $flag;
     }
 
+    /**
+     * Создает выражение для вставки новой строки
+     *
+     * @param array $row - массив данных строки
+     * @param array $cols - массив названий столбцов
+     * @return string
+     */
     public function makeInsertExpression($row, $cols) {
         $ins = '';
         $colmap = [];
@@ -145,6 +158,14 @@ class QueryMaker
         return $ins;
     }
 
+    /**
+     * Создает выражение для апдейта строки
+     *
+     * @param array $row - массив данных строки
+     * @param array $cols - массив названий столбцов
+     * @param array $pk - массив столбцов первичного ключа
+     * @return string
+     */
     public function makeSetExpression($row, $cols, $pk)
     {
         $set = '';
@@ -167,6 +188,14 @@ class QueryMaker
         return $set;
     }
 
+    /**
+     * Создает выражение WHERE, определяющее строку для обновления/удаления
+     *
+     * @param array $row - массив данных строки
+     * @param array $cols - массив названий столбцов
+     * @param array $pk - массив столбцов первичного ключа
+     * @return string
+     */
     public function makeWhereExpression($row, $cols, $pk)
     {
         $where = '';
@@ -188,6 +217,12 @@ class QueryMaker
         return $where;
     }
 
+    /**
+     * Выполняет восстановление структуры таблицы из массива (миграции)
+     *
+     * @param array $schema - массив структуры
+     * @return bool
+     */
     public function schemaQuery($schema)
     {
         $flag = true;
@@ -320,6 +355,12 @@ class QueryMaker
         return $flag;
     }
 
+    /**
+     * Генерирует выражение для восстановления структуры столбца
+     *
+     * @param array $col - массив данных столбца
+     * @return string
+     */
     public function generateColumnQuery($col)
     {
 

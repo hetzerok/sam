@@ -93,7 +93,7 @@ class MigrationCollector
                     $dir = opendir($this->config->getOption('migration_path'));
                     $files = [];
                     while ($file = readdir($dir)) {
-                        if (preg_match('/\.migration\.'.$this->config->getOption('format').'/i', $file)) {
+                        if (preg_match('/\.migration\.'.$this->config->getOption('migration_format').'/i', $file)) {
                             $files[] = $file;
                         }
                     }
@@ -148,7 +148,7 @@ class MigrationCollector
         $dir = opendir($this->config->getOption('data_path'));
         $files = [];
         while ($file = readdir($dir)) {
-            if (preg_match('/\.content-migration\.'.$this->config->getOption('format').'/i', $file)) {
+            if (preg_match('/\.content-migration\.'.$this->config->getOption('migration_format').'/i', $file)) {
                 $files[] = $file;
             }
         }
@@ -407,12 +407,12 @@ class MigrationCollector
     public function getVersion($type = 'local')
     {
         $version = array();
-        if (file_exists($this->config->getOption($type.'_version_file').".".$this->config->getOption('format'))) {
+        if (file_exists($this->config->getOption($type.'_version_file').".".$this->config->getOption('version_format'))) {
             $localVersion = file_get_contents(
-                $this->config->getOption($type.'_version_file').".".$this->config->getOption('format')
+                $this->config->getOption($type.'_version_file').".".$this->config->getOption('version_format')
             );
             if ($localVersion) {
-                $version = $this->formatCoder->decodeData($localVersion, $this->config->getOption('format'));
+                $version = $this->formatCoder->decodeData($localVersion, $this->config->getOption('version_format'));
             }
         }
 
@@ -431,9 +431,9 @@ class MigrationCollector
         $output = false;
 
         $versionArray = array('version' => $version);
-        $versionString = $this->formatCoder->encodeData($versionArray, $this->config->getOption('format'));
+        $versionString = $this->formatCoder->encodeData($versionArray, $this->config->getOption('version_format'));
         if ($versionString) {
-            $path = $this->config->getOption($type.'_version_file').".".$this->config->getOption('format');
+            $path = $this->config->getOption($type.'_version_file').".".$this->config->getOption('version_format');
             if (file_put_contents($path, $versionString)) {
                 $output = true;
             }

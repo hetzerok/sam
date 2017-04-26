@@ -20,15 +20,17 @@ $config = array(
 
     'migration_path' => 'db/migrations/', // Путь к списку миграций
     'schema_path' => 'db/schemas/', // Путь к хранящимся файлам схем
-    'format' => 'json', // Формат хранения всех документов. В дальнейшем нужно будет разделить (пока только JSON)
+    'data_path' => 'db/datas/', // Путь к файлам данных БД
+    'version_format' => 'json', // Формат файлов версий
+    'schema_format' => 'json', // Формат схем
+    'migration_format' => 'json', // Формат файлов миграций
     'time_format' => 'Ymd_His', // Формат представления временного ключа миграции
     'local_version_file' => 'db/local.version', // Путь к файлу локальной версии
     'global_version_file' => 'db/global.version', // Путь к файлу глобальной версии
 
     /* Список таблиц, для которых необходимо импортировать данные */
-    /* Функционал пока недоступен */
     'import_data_tables' => array(
-        'site_templates',
-    )
+
+    ),
 );
 return $config;
