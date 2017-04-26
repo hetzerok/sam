@@ -1,6 +1,6 @@
 {
-  "name": "opencolour/console",
-  "description": "A MODX console extension",
+  "name": "hetzerok/sam",
+  "description": "Standalone migrations for MySQL. No ORM requires. No manual schema creation.",
   "version": "0.0.3",
   "license": "MIT",
   "authors": [
