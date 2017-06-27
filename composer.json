@@ -1,7 +1,7 @@
 {
   "name": "hetzerok/sam",
   "description": "Standalone migrations for MySQL. No ORM requires. No manual schema creation.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "license": "MIT",
   "authors": [
     {
@@ -15,7 +15,8 @@
   ],
   "require": {
     "php": ">=5.5.9",
-    "symfony/console": "^3.2"
+    "symfony/console": "^3.2",
+    "monolog/monolog": "^1.23"
   },
   "autoload": {
     "psr-4": {

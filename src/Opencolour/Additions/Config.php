@@ -19,9 +19,9 @@ class Config
     /* @var \PDO $dbConnection */
     private $dbConnection = null;
 
-    private function __construct()
+    private function __construct($dir)
     {
-        $this->cfg = $this->getApplicationConfig();
+        $this->cfg = $this->getApplicationConfig($dir);
 
         // Установка параметров подключения к БД
         $connections = array(
@@ -42,6 +42,7 @@ class Config
                 $connections['username'],
                 $connections['password'], array(
                     \PDO::ATTR_PERSISTENT => true,
+                    \PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8"
                 )
             );
         } catch (\PDOException $e) {
@@ -59,10 +60,10 @@ class Config
 
     }
 
-    public static function getInstance()
+    public static function getInstance($dir = '')
     {
         if (!isset(static::$instance)) {
-            self::$instance = new Config();
+            self::$instance = new Config($dir);
         }
 
         return static::$instance;

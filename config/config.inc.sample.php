@@ -27,6 +27,7 @@ $config = array(
     'time_format' => 'Ymd_His', // Формат представления временного ключа миграции
     'local_version_file' => 'db/local.version', // Путь к файлу локальной версии
     'global_version_file' => 'db/global.version', // Путь к файлу глобальной версии
+    'log_path' => 'db/logs/sam.log', // Путь к файлу логов
 
     /* Список таблиц, для которых необходимо импортировать данные */
     'import_data_tables' => array(

@@ -9,6 +9,16 @@
 require __DIR__.'/vendor/autoload.php';
 
 use Symfony\Component\Console\Application;
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
+use Opencolour\Additions\Config;
+
+// Подключение конфига
+$config = Config::getInstance('config/subdir/');
+
+// Создаем канал лога
+$log = new Logger('name');
+$log->pushHandler(new StreamHandler($config->getOption('log_path').$config->getOption('log_file'), Logger::DEBUG));
 
 // Объявляем набор команд
 $commandsArray = array(
@@ -18,9 +28,9 @@ $commandsArray = array(
 );
 
 // Инициализируем команды
-$application = new Application('MODX console', 'v 0.0.3');
+$application = new Application('SAM', 'v 0.0.4');
 foreach ($commandsArray as $commandName) {
-    $command = new $commandName();
+    $command = new $commandName($log);
     $application->add($command);
 }
 $application->run();

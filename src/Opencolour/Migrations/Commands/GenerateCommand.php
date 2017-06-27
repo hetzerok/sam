@@ -15,6 +15,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Formatter\OutputFormatterStyle;
+use Monolog\Logger;
 
 /**
  * Class InitializeCommand
@@ -23,6 +24,15 @@ use Symfony\Component\Console\Formatter\OutputFormatterStyle;
  * Команда инициализации системы миграций
  */
 class GenerateCommand extends Command {
+
+    /** @var Logger $log */
+    protected $log = null;
+
+    public function __construct(Logger $log, $name = null)
+    {
+        $this->log = $log;
+        parent::__construct($name);
+    }
 
     protected function configure()
     {
@@ -37,9 +47,9 @@ EOT
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $config = Config::getInstance();
-        $formatCoder = new FormatCoder();
-        $structureParser = new StructureParser($formatCoder, $output);
-        $migrationCollector = new MigrationCollector($formatCoder, $output, $structureParser);
+        $formatCoder = new FormatCoder($this->log);
+        $structureParser = new StructureParser($this->log, $formatCoder, $output);
+        $migrationCollector = new MigrationCollector($this->log, $formatCoder, $output, $structureParser);
 
         if($migrationCollector->writeMigration()) {
             $structureParser->initializeSchema();

@@ -19,6 +19,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 class StructureParser
 {
+    private $log;
 
     /* @var Config $config */
     protected $config = null;
@@ -41,8 +42,9 @@ class StructureParser
      * @param FormatCoder $formatCoder
      * @param OutputInterface $output
      */
-    public function __construct(FormatCoder &$formatCoder, OutputInterface &$output)
+    public function __construct($log, FormatCoder &$formatCoder, OutputInterface &$output)
     {
+        $this->log = $log;
         $this->config = Config::getInstance();
         $this->formatCoder = $formatCoder;
         $this->output = $output;

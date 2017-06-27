@@ -14,6 +14,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 class MigrationCollector
 {
 
+    private $log;
+
     /* @var Config $config */
     protected $config = null;
 
@@ -32,8 +34,9 @@ class MigrationCollector
      * @param OutputInterface $output
      * @param StructureParser $structureParser
      */
-    public function __construct(FormatCoder &$formatCoder, OutputInterface &$output, StructureParser &$structureParser)
+    public function __construct($log, FormatCoder &$formatCoder, OutputInterface &$output, StructureParser &$structureParser)
     {
+        $this->log = $log;
         $this->config = Config::getInstance();
         $this->formatCoder = $formatCoder;
         $this->output = $output;
@@ -115,6 +118,28 @@ class MigrationCollector
 
         return $output;
     }
+
+//    /**
+//     * Получение последней примененной миграции в виде массива миграций. Используется для обработки контентных миграций
+//     * в случае отсутствия структурных
+//     *
+//     * @param string $last
+//     * @return array
+//     */
+//    public function getLastMigration($last = '') {
+//        $output = [];
+//
+//        $localVersion = $this->getVersion('local');
+//        if($localVersion) {
+//            if (array_key_exists('version', $localVersion)) {
+//                $initVersion = $localVersion['version'];
+//            } else {
+//                return [];
+//            }
+//        }
+//
+//        return $output;
+//    }
 
     /**
      * Получает ключ следующей по порядку миграции
@@ -329,6 +354,11 @@ class MigrationCollector
                 if ($migration) {
                     $path = $this->getMigrationPath($name, 'content');
                     if ($this->createMigration($migration, $path, $name)) {
+
+                        // Создаем пустую миграцию чтобы сохранить последовательность
+                        $path = $this->getMigrationPath($name, 'structure');
+                        $this->createMigration([], $path, $name);
+
                         $this->output->writeln('<info>Content migration created successfully.</info>');
                         $output = true;
                     } else {

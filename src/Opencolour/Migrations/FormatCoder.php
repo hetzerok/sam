@@ -19,14 +19,17 @@ use Opencolour\Additions\Config;
 class FormatCoder
 {
 
+    private $log;
+
     /* @var Config $config */
     protected $config = null;
 
     /**
      * FormatCoder constructor.
      */
-    public function __construct()
+    public function __construct($log)
     {
+        $this->log = $log;
         $this->config = Config::getInstance();
     }
 

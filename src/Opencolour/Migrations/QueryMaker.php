@@ -13,6 +13,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 class QueryMaker
 {
 
+    private $log;
+
     /* @var Config $config */
     protected $config = null;
 
@@ -25,8 +27,9 @@ class QueryMaker
     /**
      * QueryMaker constructor.
      */
-    public function __construct(OutputInterface &$output)
+    public function __construct($log, OutputInterface &$output)
     {
+        $this->log = $log;
         $this->config = Config::getInstance();
         $this->pdo = $this->config->getConnection();
         $this->output = $output;
@@ -116,6 +119,7 @@ class QueryMaker
                         if ($this->pdo->query($sql)) {
                             $k_i++;
                         } else {
+                            $this->log->info($sql);
                             $k_i_n++;
                         }
                     } else {
@@ -151,7 +155,7 @@ class QueryMaker
         $valmap = [];
         foreach ($row as $k => $v) {
             $colmap[] = "`".$cols[$k]."`";
-            $valmap[] = "'".$v."'";
+            $valmap[] = $this->pdo->quote($v);
         }
         $ins = "(".implode(', ', $colmap).") VALUES (".implode(', ', $valmap).")";
 
@@ -174,13 +178,13 @@ class QueryMaker
             foreach ($row as $k => $v) {
                 $key = array_search($v, $pk);
                 if ($key === false) {
-                    $keymap[] = "`".$cols[$k]."`='".$row[$k]."'";
+                    $keymap[] = "`".$cols[$k]."`=".$this->pdo->quote($row[$k]);
                 }
             }
         } // В общем случае обновление без ключа не имеет смысла, но на всякий пусть будет
         else {
             foreach ($row as $k => $v) {
-                $keymap[] = "`".$cols[$k]."`='".$v."'";
+                $keymap[] = "`".$cols[$k]."`=".$this->pdo->quote($v);
             }
         }
         $set = implode(', ', $keymap);
@@ -204,12 +208,12 @@ class QueryMaker
             foreach ($pk as $v) {
                 $k = array_search($v, $cols);
                 if ($k !== false) {
-                    $keymap[] = "`".$cols[$k]."`='".$row[$k]."'";
+                    $keymap[] = "`".$cols[$k]."`=".$this->pdo->quote($row[$k]);
                 }
             }
         } else {
             foreach ($row as $k => $v) {
-                $keymap[] = "`".$cols[$k]."`='".$v."'";
+                $keymap[] = "`".$cols[$k]."`=".$this->pdo->quote($v);
             }
         }
         $where = implode(' AND ', $keymap);
