@@ -14,7 +14,7 @@ use Monolog\Handler\StreamHandler;
 use Opencolour\Additions\Config;
 
 // Подключение конфига
-$config = Config::getInstance('config/subdir/');
+$config = Config::getInstance('config/');
 
 // Создаем канал лога
 $log = new Logger('name');
@@ -28,7 +28,7 @@ $commandsArray = array(
 );
 
 // Инициализируем команды
-$application = new Application('SAM', 'v 0.0.4');
+$application = new Application('SAM', 'v 0.0.5');
 foreach ($commandsArray as $commandName) {
     $command = new $commandName($log);
     $application->add($command);

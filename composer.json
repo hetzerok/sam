@@ -1,7 +1,7 @@
 {
   "name": "hetzerok/sam",
   "description": "Standalone migrations for MySQL. No ORM requires. No manual schema creation.",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "license": "MIT",
   "authors": [
     {

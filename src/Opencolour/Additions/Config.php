@@ -82,7 +82,7 @@ class Config
         if ($dir) {
             $path = $dir;
         } else {
-            $path = 'config/';
+            $path = '';
         }
 
         $dir = opendir($path);
