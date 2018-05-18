@@ -155,7 +155,11 @@ class QueryMaker
         $valmap = [];
         foreach ($row as $k => $v) {
             $colmap[] = "`".$cols[$k]."`";
-            $valmap[] = $this->pdo->quote($v);
+            if($v === null) {
+                $valmap[] = 'NULL';
+            } else {
+                $valmap[] = $this->pdo->quote($v);
+            }
         }
         $ins = "(".implode(', ', $colmap).") VALUES (".implode(', ', $valmap).")";
 
@@ -178,13 +182,23 @@ class QueryMaker
             foreach ($row as $k => $v) {
                 $key = array_search($v, $pk);
                 if ($key === false) {
-                    $keymap[] = "`".$cols[$k]."`=".$this->pdo->quote($row[$k]);
+                    if($v === null) {
+                        $val = 'NULL';
+                    } else {
+                        $val = $this->pdo->quote($v);
+                    }
+                    $keymap[] = "`".$cols[$k]."`=".$val;
                 }
             }
         } // В общем случае обновление без ключа не имеет смысла, но на всякий пусть будет
         else {
             foreach ($row as $k => $v) {
-                $keymap[] = "`".$cols[$k]."`=".$this->pdo->quote($v);
+                if($v === null) {
+                    $val = 'NULL';
+                } else {
+                    $val = $this->pdo->quote($v);
+                }
+                $keymap[] = "`".$cols[$k]."`=".$val;
             }
         }
         $set = implode(', ', $keymap);

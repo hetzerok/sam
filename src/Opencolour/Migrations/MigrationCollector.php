@@ -329,13 +329,17 @@ class MigrationCollector
 
         // Создание миграции структуры
         $newSchema = $this->structureParser->getSchema();
+        //$this->log->error('new', $newSchema);
         $startSchema = $this->getInitMigration();
+        //$this->log->error('start', $startSchema);
+        $migCreated = 0;
         if ($newSchema && $startSchema) {
             $migration = $this->getSchemaDiff($startSchema, $newSchema);
             if ($migration) {
                 $path = $this->getMigrationPath($name, 'structure');
                 if ($this->createMigration($migration, $path, $name)) {
                     $this->output->writeln('<info>Migration created successfully.</info>');
+                    $migCreated = 1;
                     $output = true;
                 }
             } else {
@@ -356,8 +360,10 @@ class MigrationCollector
                     if ($this->createMigration($migration, $path, $name)) {
 
                         // Создаем пустую миграцию чтобы сохранить последовательность
-                        $path = $this->getMigrationPath($name, 'structure');
-                        $this->createMigration([], $path, $name);
+                        if(!$migCreated) {
+                            $path = $this->getMigrationPath($name, 'structure');
+                            $this->createMigration([], $path, $name);
+                        }
 
                         $this->output->writeln('<info>Content migration created successfully.</info>');
                         $output = true;
